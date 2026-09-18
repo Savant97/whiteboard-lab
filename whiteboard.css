@@ -12,3 +12,4 @@
 .wb-canvas { flex: 1; width: 100%; touch-action: none; cursor: crosshair; background: #fff;
   background-image: radial-gradient(#e2e8f0 1px, transparent 1px); background-size: 24px 24px; }
 body.wb-open { overflow: hidden; }
+.wb-ring { position: fixed; display: none; pointer-events: none; border: 1.5px solid #c74b50; border-radius: 50%; background: rgba(199,75,80,.08); z-index: 61; }

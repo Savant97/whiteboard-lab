@@ -15,8 +15,8 @@
     var store = opts.store, strokes = [], history = [], current = null, tool = "pen", color = COLORS[0][0], width = 4, penSeen = false, dirty = false;
     var selected = [], sel = null;  /* sel: {mode: "marquee"|"move", id, x0, y0, x1, y1, dx, dy} while a select gesture is in progress */
     var boardName = opts.name || "", overlay = el("div", "wb-overlay"), bar = el("div", "wb-bar"), canvas = el("canvas", "wb-canvas");
-    var ctx = canvas.getContext("2d"), status = el("span", "wb-status");
-    overlay.appendChild(bar); overlay.appendChild(canvas); document.body.appendChild(overlay);
+    var ctx = canvas.getContext("2d"), status = el("span", "wb-status"), ring = el("div", "wb-ring");  /* eraser footprint under the pointer */
+    overlay.appendChild(bar); overlay.appendChild(canvas); overlay.appendChild(ring); document.body.appendChild(overlay);
     document.body.classList.add("wb-open");
 
     /* ---- toolbar ---- */
@@ -45,7 +45,12 @@
     function setTool(t) {
       tool = t; if (t !== "select") setSelection([]);
       penBtn.classList.toggle("wb-active", t === "pen"); eraserBtn.classList.toggle("wb-active", t === "eraser"); selectBtn.classList.toggle("wb-active", t === "select");
-      canvas.style.cursor = t === "select" ? "default" : "crosshair";
+      canvas.style.cursor = t === "select" ? "default" : t === "eraser" ? "none" : "crosshair";
+      if (t !== "eraser") ring.style.display = "none";
+    }
+    function moveRing(e) {
+      if (tool !== "eraser") return;
+      var d = width * 4; ring.style.width = ring.style.height = d + "px"; ring.style.left = (e.clientX - d / 2) + "px"; ring.style.top = (e.clientY - d / 2) + "px"; ring.style.display = "block";
     }
     function setColor(c) { color = c; setTool("pen"); colorBtns.forEach(function (b, i) { b.classList.toggle("wb-active", COLORS[i][0] === c); }); }
     function setWidth(w) { width = w; widthBtns.forEach(function (b, i) { b.classList.toggle("wb-active", WIDTHS[i][1] === w); }); }
@@ -110,6 +115,7 @@
       if (current && e.pointerType === "pen" && current.type === "touch") { current = null; redraw(); }  /* the pen evicts a palm stroke started before any pen was seen */
       if (current || sel) return;  /* one gesture at a time: a palm landing mid-stroke must not start or end anything */
       e.preventDefault(); try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* synthetic or already-released pointer */ }
+      moveRing(e);
       var p = point(e);
       if (tool === "select") {
         if (selected.length && inside(box(selected), p[0], p[1])) sel = { mode: "move", id: e.pointerId, x0: p[0], y0: p[1], dx: 0, dy: 0 };
@@ -119,6 +125,7 @@
       current = { id: e.pointerId, type: e.pointerType, tool: tool, color: color, width: tool === "eraser" ? width * 4 : width, points: [p] };
     });
     canvas.addEventListener("pointermove", function (e) {
+      moveRing(e);  /* also on hover (mouse, pencil hover), so the footprint is visible before touching down */
       if (sel && e.pointerId === sel.id) {
         var q = point(e);
         if (sel.mode === "move") { sel.dx = q[0] - sel.x0; sel.dy = q[1] - sel.y0; } else { sel.x1 = q[0]; sel.y1 = q[1]; }
@@ -151,6 +158,7 @@
       commit(strokes.concat([done])); status.textContent = "";
     }
     canvas.addEventListener("pointerup", endStroke); canvas.addEventListener("pointercancel", endStroke); canvas.addEventListener("pointerleave", endStroke);
+    canvas.addEventListener("pointerleave", function () { ring.style.display = "none"; });
     canvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
 
     /* ---- persistence ---- */
