@@ -1,0 +1,14 @@
+/* Whiteboard (docs/javascripts/whiteboard.js) */
+.wb-overlay { position: fixed; inset: 0; z-index: 60; background: #fff; display: flex; flex-direction: column; }
+.wb-bar { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; padding: .4rem .6rem; border-bottom: 1px solid #e2e8f0; background: #f8fafc; font: 13px system-ui; }
+.wb-btn { border: 1px solid #e2e8f0; background: #fff; color: #0f172a; border-radius: .4rem; padding: .35rem .6rem; cursor: pointer; font: inherit; min-height: 2.2rem; }
+.wb-btn.wb-active { border-color: #4a90d9; background: #eaf2fb; }
+.wb-primary { background: #4a90d9; border-color: #4a90d9; color: #fff; }
+.wb-close { margin-left: auto; }
+.wb-swatch { width: 1.6rem; padding: 0; border-radius: 999px; }
+.wb-swatch.wb-active { outline: 2px solid #0f172a; outline-offset: 2px; }
+.wb-name, .wb-select { font: inherit; padding: .3rem .4rem; border: 1px solid #e2e8f0; border-radius: .4rem; background: #fff; color: #0f172a; max-width: 11rem; }
+.wb-status { color: #64748b; margin-left: .4rem; }
+.wb-canvas { flex: 1; width: 100%; touch-action: none; cursor: crosshair; background: #fff;
+  background-image: radial-gradient(#e2e8f0 1px, transparent 1px); background-size: 24px 24px; }
+body.wb-open { overflow: hidden; }

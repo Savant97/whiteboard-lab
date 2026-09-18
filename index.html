@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f8fafc">
+<title>Whiteboard Lab</title>
+<meta name="description" content="A stylus whiteboard to test drawing from memory on a tablet. Boards stay in this browser.">
+<link rel="stylesheet" href="whiteboard.css">
+<style>
+  :root { --bg: #f8fafc; --surface: #fff; --text: #0f172a; --text-soft: #475569; --border: #e2e8f0; --primary: #4a90d9; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 42rem; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
+  h1 { font-size: 1.6rem; margin: .2rem 0 .6rem; }
+  p { color: var(--text-soft); margin: .4rem 0; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: .875rem; padding: 1rem 1.2rem; margin: 1rem 0; box-shadow: 0 1px 2px rgba(15,23,42,.05); }
+  .open { display: inline-block; font: inherit; font-weight: 600; background: var(--primary); color: #fff; border: 0; border-radius: .5rem; padding: .7rem 1.2rem; cursor: pointer; min-height: 2.8rem; }
+  ol { padding-left: 1.2rem; color: var(--text-soft); }
+  code { background: #eaf2fb; padding: 0 .3rem; border-radius: .3rem; }
+  .boards { list-style: none; padding: 0; margin: .5rem 0 0; }
+  .boards li { display: flex; align-items: center; gap: .6rem; padding: .4rem 0; border-top: 1px solid var(--border); }
+  .boards img { width: 96px; height: 60px; object-fit: cover; border: 1px solid var(--border); border-radius: .3rem; background: #fff; }
+  .boards button, .boards a { font: inherit; font-size: .9rem; border: 1px solid var(--border); background: #fff; color: var(--text); border-radius: .4rem; padding: .3rem .6rem; cursor: pointer; text-decoration: none; }
+  .boards .name { flex: 1; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Whiteboard Lab</h1>
+  <p>Draw a concept from memory with your pencil, save it, reopen it later. Nothing leaves this browser: boards are kept in <code>localStorage</code>; <em>PNG</em> downloads a picture.</p>
+  <div class="card">
+    <button class="open" id="open">Open whiteboard</button>
+    <p>Pencil draws with pressure. Once the pencil has touched the board, fingers are ignored (palm rejection); tap <code>Touch: off</code> to allow finger drawing. Two-finger gestures still scroll/zoom the page outside the board.</p>
+  </div>
+  <div class="card">
+    <strong>What to try on the iPad</strong>
+    <ol>
+      <li>Add this page to the Home Screen (Share → Add to Home Screen) so it opens full screen.</li>
+      <li>Draw a small diagram: boxes, arrows, labels. Does the line follow the pencil without lag? Does pressure change the width?</li>
+      <li>Rest your palm while writing: does it leave marks?</li>
+      <li>Save, close, reopen from the list below: same drawing?</li>
+    </ol>
+  </div>
+  <div class="card">
+    <strong>Saved boards</strong>
+    <ul class="boards" id="boards"><li><span class="name" style="color:#64748b">none yet</span></li></ul>
+  </div>
+</main>
+<script src="whiteboard.js"></script>
+<script>
+(function () {
+  var KEY = "wb-lab:";
+  var store = {
+    list: function () {
+      var out = [];
+      for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (k.indexOf(KEY) === 0) { try { var b = JSON.parse(localStorage.getItem(k)); out.push({ name: k.slice(KEY.length), updated: b.updated || 0 }); } catch (e) { /* skip */ } } }
+      return Promise.resolve(out.sort(function (a, b) { return b.updated - a.updated; }));
+    },
+    load: function (name) { var b = JSON.parse(localStorage.getItem(KEY + name) || "null"); return b ? Promise.resolve(b) : Promise.reject(new Error("board not found")); },
+    save: function (name, data) {
+      try { localStorage.setItem(KEY + name, JSON.stringify({ strokes: data.strokes, width: data.width, height: data.height, png: data.png, updated: Date.now() })); }
+      catch (e) { return Promise.reject(new Error("storage full or blocked: " + e.message)); }
+      renderList(); return Promise.resolve({ saved: "saved " + name + " (this browser)" });
+    }
+  };
+  function renderList() {
+    var ul = document.getElementById("boards"); ul.innerHTML = "";
+    store.list().then(function (boards) {
+      if (!boards.length) { ul.innerHTML = '<li><span class="name" style="color:#64748b">none yet</span></li>'; return; }
+      boards.forEach(function (b) {
+        var li = document.createElement("li"), data = JSON.parse(localStorage.getItem(KEY + b.name));
+        var img = document.createElement("img"); img.src = data.png || ""; img.alt = ""; li.appendChild(img);
+        var name = document.createElement("span"); name.className = "name"; name.textContent = b.name; li.appendChild(name);
+        var open = document.createElement("button"); open.textContent = "Open"; open.onclick = function () { window.Whiteboard.open({ store: store, name: b.name }); }; li.appendChild(open);
+        var dl = document.createElement("a"); dl.textContent = "PNG"; dl.href = data.png || "#"; dl.download = b.name + ".png"; li.appendChild(dl);
+        var del = document.createElement("button"); del.textContent = "Delete"; del.onclick = function () { if (confirm("Delete " + b.name + "?")) { localStorage.removeItem(KEY + b.name); renderList(); } }; li.appendChild(del);
+        ul.appendChild(li);
+      });
+    });
+  }
+  document.getElementById("open").onclick = function () { window.Whiteboard.open({ store: store }); };
+  renderList();
+})();
+</script>
+</body>
+</html>
