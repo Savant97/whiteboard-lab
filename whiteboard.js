@@ -14,6 +14,7 @@
   function open(opts) {
     var store = opts.store, strokes = [], history = [], current = null, tool = "pen", color = COLORS[0][0], width = 4, penSeen = false, dirty = false;
     var selected = [], sel = null;  /* sel: {mode: "marquee"|"move", id, x0, y0, x1, y1, dx, dy} while a select gesture is in progress */
+    var draftKey = "wb-draft:" + (opts.draftKey || opts.title || location.pathname), draftTimer = null;
     var boardName = opts.name || "", overlay = el("div", "wb-overlay"), bar = el("div", "wb-bar"), canvas = el("canvas", "wb-canvas");
     var ctx = canvas.getContext("2d"), status = el("span", "wb-status"), ring = el("div", "wb-ring");  /* eraser footprint under the pointer */
     overlay.appendChild(bar); overlay.appendChild(canvas); overlay.appendChild(ring); document.body.appendChild(overlay);
@@ -32,6 +33,7 @@
     btn("Clear", "Clear the board", function () { if (strokes.length && !confirm("Clear the whole board?")) return; commit([]); setSelection([]); });
     var nameInput = el("input", "wb-name"); nameInput.placeholder = "board name"; nameInput.value = boardName; bar.appendChild(nameInput);
     btn("Save", "Save strokes + PNG (Ctrl+S)", save, "wb-primary");
+    btn("Finish recall", "Keep this unaided attempt as its own board, then correct on a copy in red", finishRecall);
     var select = el("select", "wb-select"); bar.appendChild(select);
     select.onchange = function () { if (select.value) loadBoard(select.value); };
     if (opts.onInsert) btn("Insert", "Insert the saved PNG into the playbook", function () {
@@ -57,7 +59,19 @@
     function setSelection(list) { selected = list; dupBtn.disabled = delBtn.disabled = !list.length; redraw(); }
 
     /* ---- model: strokes are replaced, never mutated, so undo is a stack of previous arrays ---- */
-    function commit(next) { history.push(strokes); if (history.length > 100) history.shift(); strokes = next; dirty = true; redraw(); }
+    function commit(next) { history.push(strokes); if (history.length > 100) history.shift(); strokes = next; dirty = true; redraw(); scheduleDraft(); }
+    /* iPad Safari suspends and reloads background tabs: the unsaved board lives in localStorage until Save clears it */
+    function scheduleDraft() {
+      clearTimeout(draftTimer);
+      draftTimer = setTimeout(function () { try { localStorage.setItem(draftKey, JSON.stringify({ strokes: strokes, name: nameInput.value, ts: Date.now() })); } catch (e) { /* quota or private mode */ } }, 800);
+    }
+    function clearDraft() { clearTimeout(draftTimer); try { localStorage.removeItem(draftKey); } catch (e) { /* ignore */ } }
+    function restoreDraft() {
+      var d = null; try { d = JSON.parse(localStorage.getItem(draftKey) || "null"); } catch (e) { /* ignore */ }
+      if (!d || !d.strokes || !d.strokes.length || strokes.length) return;
+      strokes = d.strokes; dirty = true; if (d.name && !nameInput.value) nameInput.value = d.name; redraw();
+      status.textContent = "unsaved draft from " + new Date(d.ts).toLocaleTimeString().slice(0, 5) + " restored";
+    }
     function undo() { if (!history.length) return; strokes = history.pop(); dirty = true; setSelection([]); }
     function translate(s, dx, dy) { return { tool: s.tool, color: s.color, width: s.width, points: s.points.map(function (p) { return [p[0] + dx, p[1] + dy, p[2]]; }) }; }
     function box(list, dx, dy) {
@@ -173,16 +187,31 @@
       store.load(name).then(function (b) { strokes = b.strokes || []; history = []; boardName = name; nameInput.value = name; dirty = false; setSelection([]); status.textContent = "opened " + name; })
         .catch(function (e) { status.textContent = e.message; });
     }
-    function save() {
+    function boardSlug() {
       var name = (nameInput.value || "").trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-|-$/g, "");
       if (!name) { name = "board-" + new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-"); nameInput.value = name; }
+      return name;
+    }
+    function finishRecall() {
+      /* the unaided attempt is the evidence; corrections go on a copy so the attempt is never rewritten */
+      if (!strokes.length) { status.textContent = "draw first"; return; }
+      var base = boardSlug().replace(/-(attempt|review)$/, "");
+      nameInput.value = base + "-attempt";
+      save(function () {
+        nameInput.value = base + "-review"; boardName = ""; dirty = true; setColor(COLORS[2][0]); setTool("pen");
+        status.textContent = "attempt kept as " + base + "-attempt. Open the Novak map, correct in red, then Save.";
+      });
+    }
+    function save(then) {
+      var name = boardSlug();
       var keep = selected; selected = []; sel = null; redraw();  /* the PNG must not carry the selection box */
       var off = document.createElement("canvas"); off.width = canvas.width; off.height = canvas.height;
       var octx = off.getContext("2d"); octx.fillStyle = "#fff"; octx.fillRect(0, 0, off.width, off.height); octx.drawImage(canvas, 0, 0);
       setSelection(keep);
       status.textContent = "saving…";
       store.save(name, { strokes: strokes, width: canvas.getBoundingClientRect().width, height: canvas.getBoundingClientRect().height, png: off.toDataURL("image/png") })
-        .then(function (r) { boardName = name; dirty = false; status.textContent = r.saved || "saved"; return refreshList(); })
+        .then(function (r) { boardName = name; dirty = false; clearDraft(); status.textContent = r.saved || "saved"; return refreshList(); })
+        .then(function () { if (then) then(); })
         .catch(function (e) { status.textContent = e.message; });
     }
     function close() {
@@ -203,7 +232,7 @@
       else if (e.key === "s") setTool("select");
     }
     window.addEventListener("resize", resize); document.addEventListener("keydown", keys);
-    setSelection([]); resize(); refreshList().then(function () { if (boardName) loadBoard(boardName); });
+    setSelection([]); resize(); refreshList().then(function () { if (boardName) loadBoard(boardName); else restoreDraft(); });
     return { close: close };
   }
 
